@@ -109,7 +109,7 @@ class Gmail(object):
         msg_plain: Optional[str] = None,
         cc: Optional[List[str]] = None,
         bcc: Optional[List[str]] = None,
-        attachments: Optional[List[str]] = None,
+        attachments: Optional[List[dict]] = None,
         signature: bool = False,
         user_id: str = 'me'
     ) -> Message:
@@ -126,7 +126,7 @@ class Gmail(object):
                 is not provided.
             cc: The list of email addresses to be cc'd.
             bcc: The list of email addresses to be bcc'd.
-            attachments: The list of attachment file names.
+            attachments: The list of attachment file names and custom headers.
             signature: Whether the account signature should be added to the 
                 message.
             user_id: The address of the sending account. 'me' for the 
@@ -693,16 +693,16 @@ class Gmail(object):
             subject = ''
             msg_hdrs = {}
             for hdr in headers:
-                if hdr['name'].lower() == 'date':
+                if hdr['name'] == 'Date':
                     try:
                         date = str(parser.parse(hdr['value']).astimezone())
                     except Exception:
                         date = hdr['value']
-                elif hdr['name'].lower() == 'from':
+                elif hdr['name'] == 'From':
                     sender = hdr['value']
-                elif hdr['name'].lower() == 'to':
+                elif hdr['name'] == 'To':
                     recipient = hdr['value']
-                elif hdr['name'].lower() == 'subject':
+                elif hdr['name'] == 'Subject':
                     subject = hdr['value']
                 
                 msg_hdrs[hdr['name']] = hdr['value']
@@ -828,7 +828,7 @@ class Gmail(object):
         msg_plain: str = None,
         cc: List[str] = None,
         bcc: List[str] = None,
-        attachments: List[str] = None,
+        attachments: List[dict] = None,
         signature: bool = False,
         user_id: str = 'me'
     ) -> dict:
@@ -844,7 +844,7 @@ class Gmail(object):
                 or old browsers).
             cc: The list of email addresses to be Cc'd.
             bcc: The list of email addresses to be Bcc'd
-            attachments: A list of attachment file paths.
+            attachments: A list of attachment file paths and custom headers.
             signature: Whether the account signature should be added to the 
                 message. Will add the signature to your HTML message only, or a 
                 create a HTML message if none exists.
@@ -897,18 +897,19 @@ class Gmail(object):
     def _ready_message_with_attachments(
         self,
         msg: MIMEMultipart,
-        attachments: List[str]
+        attachments: List[dict]
     ) -> None:
         """
         Converts attachment filepaths to MIME objects and adds them to msg.
 
         Args:
             msg: The message to add attachments to.
-            attachments: A list of attachment file paths.
+            attachments: A list of attachment file paths and custom headers.
 
         """
 
-        for filepath in attachments:
+        for attachment in attachments:
+            filepath: str = attachment["fname"]
             content_type, encoding = mimetypes.guess_type(filepath)
 
             if content_type is None or encoding is not None:
@@ -930,7 +931,14 @@ class Gmail(object):
                     attm.set_payload(raw_data)
 
             fname = os.path.basename(filepath)
-            attm.add_header('Content-Disposition', 'attachment', filename=fname)
+            if "headers" in attachment:
+                for header in attachment["headers"]:
+                        if len(header) == 3:
+                            attm.add_header(header[0], header[1], **header[2])
+                        elif len(header) == 2:
+                            attm.add_header(header[0], header[1])
+            else:
+                attm.add_header('Content-Disposition', 'attachment', filename=fname)
             msg.attach(attm)
 
     def _get_alias_info(
